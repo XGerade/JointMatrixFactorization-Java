@@ -1,0 +1,14 @@
+*.txt
+*.dat
+*.test
+*.train
+*.log
+*.result
+/datasets
+/LOG
+/results
+.project
+.classpath
+/target
+
+*.~1~
