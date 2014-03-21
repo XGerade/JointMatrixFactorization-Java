@@ -1,3 +1,10 @@
+/*
+ * Project: JointMatrixFactorization
+ * @author Fangzhou Yang
+ * @author Xugang Zhou
+ * @version 1.0
+ */
+
 package de.tu_berlin.dima.bigdata.jointmatrixfactorization.solve;
 
 import java.util.Iterator;
@@ -9,7 +16,6 @@ import org.apache.mahout.math.RandomAccessSparseVector;
 import org.apache.mahout.math.SequentialAccessSparseVector;
 import org.apache.mahout.math.Vector;
 import org.apache.mahout.math.als.AlternatingLeastSquaresSolver;
-import org.apache.mahout.math.function.Functions;
 import org.apache.mahout.math.map.OpenIntObjectHashMap;
 
 import com.google.common.collect.Lists;
@@ -22,17 +28,15 @@ import eu.stratosphere.pact.common.type.PactRecord;
 import eu.stratosphere.pact.common.type.base.PactFloat;
 import eu.stratosphere.pact.common.type.base.PactInteger;
 
-/**
- * Input: <userID, itemID, Rating, featureVector>
- * Reduce Key: userID
- * Output: <userID, featureVector>
- * 
- * @author titicaca
- *
+/*
+ * This Reduce class reduce all entries with same userID to its user-feature-vector
  */
 public class UserFeatureVectorUpdateReducer extends ReduceStub{
 	
 	PactRecord outputRecord = new PactRecord();
+    /*
+     * Get common variables
+     */
 	private final double lambda = Util.lambda;
 	private final int numFeatures = Util.numFeatures;
 	private final int numItems = Util.numItems;
@@ -40,6 +44,12 @@ public class UserFeatureVectorUpdateReducer extends ReduceStub{
 	
 	private static final Logger LOGGER = Logger.getLogger(UserFeatureVectorUpdateReducer.class.getName()); 
 
+	
+	/*
+	 * This override method defines how user-feature-vector is calculated from all items' rating and their feature-vector
+	 * @param in:Iterator[(userID, itemID, rating, user-feature-vector)] List with same userID
+	 * @return (userID, user-feature-vector)
+	 */
 	@Override
 	public void reduce(Iterator<PactRecord> records, Collector<PactRecord> collector)
 			throws Exception {
@@ -47,13 +57,23 @@ public class UserFeatureVectorUpdateReducer extends ReduceStub{
 		PropertyConfigurator.configure("log4j.properties");
 
 		PactRecord currentRecord = null;
-//		Vector userRatingVector = new SequentialAccessSparseVector();
-		Vector vector = new RandomAccessSparseVector(Integer.MAX_VALUE, numItems);
+	    /*
+	     * Set vector for put in the item rating from the user
+	     * The itemID starts from 1
+	     * So the initialized cardinality would be set to numItems + 1
+	     */
+		Vector vector = new RandomAccessSparseVector(numItems + 1, numItems + 1);
 		int userID = -1;
 		
-		OpenIntObjectHashMap<Vector> itemFeatureMatrix = numItems > 0
-		        ? new OpenIntObjectHashMap<Vector>(numItems) : new OpenIntObjectHashMap<Vector>();
+	    /*
+	     * Set a Map for all items' feature vectors
+	     */
+		OpenIntObjectHashMap<Vector> itemFeatureMatrix = new OpenIntObjectHashMap<Vector>(numItems);
 
+	    /*
+	     * Put all items' rating in a vector
+	     * HashMap all the items' feature-vectors
+	     */
 		while (records.hasNext()) {
 			currentRecord = records.next();
 			
@@ -69,6 +89,9 @@ public class UserFeatureVectorUpdateReducer extends ReduceStub{
 			
 		}
 		
+	    /*
+	     * Extract all item-feature-vectors whose itemID rated by the user
+	     */    
 		Vector userRatingVector = new SequentialAccessSparseVector(vector);
 				
 		List<Vector> featureVectors = Lists.newArrayListWithCapacity(userRatingVector.getNumNondefaultElements());
@@ -76,7 +99,6 @@ public class UserFeatureVectorUpdateReducer extends ReduceStub{
 	      int index = e.index();
 	      if(itemFeatureMatrix.containsKey(index)){
 	    	  featureVectors.add(itemFeatureMatrix.get(index));	  
-//	    	  LOGGER.info("get itemID: " + index +" in userRatingVector of User " + userID);
 	      }else{
 	    	  System.out.println("Error! no such item:" + index +" in itemFeatureMatrix");
 	    	  LOGGER.debug("Error! no such item:" + index +" in itemFeatureMatrix");
@@ -84,6 +106,9 @@ public class UserFeatureVectorUpdateReducer extends ReduceStub{
 	    }
 	    
 	    if(userID > 0 ){
+	        /*
+	         * Calculate the user-feature-vector using Alternative Least Square (ALS) method
+	         */
 		    Vector userFeatureVector = AlternatingLeastSquaresSolver.solve(featureVectors, userRatingVector, lambda, numFeatures);
 			userFeatureVectorWritable.set(userFeatureVector);
 			outputRecord.setField(0, new PactInteger(userID));

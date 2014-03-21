@@ -1,3 +1,10 @@
+/*
+ * Project: JointMatrixFactorization
+ * @author Fangzhou Yang
+ * @author Xugang Zhou
+ * @version 1.0
+ */
+
 package de.tu_berlin.dima.bigdata.jointmatrixfactorization.mapper;
 
 import de.tu_berlin.dima.bigdata.jointmatrixfactorization.util.Util;

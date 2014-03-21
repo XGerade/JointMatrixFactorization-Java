@@ -1,5 +1,11 @@
-package de.tu_berlin.bigdata.jointmatrixfactorization.plan;
+/*
+ * Project: JointMatrixFactorization
+ * @author Fangzhou Yang
+ * @author Xugang Zhou
+ * @version 1.0
+ */
 
+package de.tu_berlin.bigdata.jointmatrixfactorization.plan;
 
 import de.tu_berlin.dima.bigdata.jointmatrixfactorization.mapper.InitItemFeatureVectorReducer;
 import de.tu_berlin.dima.bigdata.jointmatrixfactorization.mapper.TuppleMapper;
@@ -22,6 +28,9 @@ import eu.stratosphere.pact.common.plan.PlanAssemblerDescription;
 import eu.stratosphere.pact.common.type.base.PactFloat;
 import eu.stratosphere.pact.common.type.base.PactInteger;
 
+/*
+ * This Class is the the "plan" class of this project.
+ */
 public class MatrixFactorizationPlan implements PlanAssembler, PlanAssemblerDescription{
 	
 	private final int numIterations = 50;
@@ -31,6 +40,13 @@ public class MatrixFactorizationPlan implements PlanAssembler, PlanAssemblerDesc
 	private final ReduceContract userFeatureVectorUpdateReducers[] = new ReduceContract[numIterations];
 	private final ReduceContract itemFeatureVectorUpdateReducers[] = new ReduceContract[numIterations];
 	
+	  /*
+	   * This method defines how the data would be operated.
+	   * @return The whole scala-plan
+	   * @param args(0) Path to input file
+	   * @param args(1) Path to output file
+	   * @param args(2) Number of subtasks to specify parallelism
+	   */
 	@Override
 	public String getDescription() {
 		return "Usage: [inputPath] [outputPath] ([numSubtasks])";
@@ -49,11 +65,17 @@ public class MatrixFactorizationPlan implements PlanAssembler, PlanAssemblerDesc
 				.builder(TuppleMapper.class).input(source)
 				.name("Rating Tupple Mapper").build();
 
+	    /*
+	     * Initialize item-feature-vectors with random value
+	     */
 		ReduceContract initItemFeatureVectorReducer = ReduceContract
 				.builder(InitItemFeatureVectorReducer.class, PactInteger.class, 1)
 				.input(tuppleMapper).name("Init Item Feature Vector Reducer").build();
 		
 		
+	    /*
+	     * Learn the user-feature-vectors with initialized item-feature-vectors
+	     */
 		userFeatureVectorUpdateJoints[0] = MatchContract
 				.builder(Joint.class, PactInteger.class, 1, 0)
 				.input1(tuppleMapper)
@@ -68,10 +90,13 @@ public class MatrixFactorizationPlan implements PlanAssembler, PlanAssemblerDesc
 				.build();
 		
 		
+	    /*
+	     * Continue to Alternative-Least-Sqaure (ALS) learning with numIter iterations
+	     */
 		for(int i = 1; i < numIterations; i ++){
-			
-//			System.out.println("Iteration: " + i );
-			
+		    /*
+		     * Learn the item-feature-vectors with user-feature-vectors
+		     */
 			itemFeatureVectorUpdateJoints[i-1] = MatchContract
 					.builder(Joint.class, PactInteger.class, 0, 0)
 					.input1(tuppleMapper)
@@ -111,12 +136,18 @@ public class MatrixFactorizationPlan implements PlanAssembler, PlanAssemblerDesc
 				.name("item Feature Vector Update Reducer " + (numIterations-1))
 				.build();
 		
+	    /*
+	     * Use learned user- and item-feature-vectors to do the prediction of rating
+	     */
 		CrossContract predictCrosser = CrossContract.builder(PredictionCrosser.class)
 				.input1(itemFeatureVectorUpdateReducers[numIterations-1])
 				.input2(userFeatureVectorUpdateReducers[numIterations-1])
 				.name("Predict Crosser")
 				.build();
 		
+	    /*
+	     * Put the predicted-rating result to output stream
+	     */
 		FileDataSink sink = new FileDataSink(RecordOutputFormat.class, outputPath, predictCrosser, "Rating Prediction");
 		RecordOutputFormat.configureRecordFormat(sink)
 			.recordDelimiter('\n')
@@ -126,6 +157,9 @@ public class MatrixFactorizationPlan implements PlanAssembler, PlanAssemblerDesc
 			.field(PactFloat.class, 2);
 		
 
+	    /*
+	     * Return the plan
+	     */
 		Plan plan = new Plan(sink, "Rating Prediction Computation");
 		plan.setDefaultParallelism(numSubtasks);
 
@@ -133,6 +167,10 @@ public class MatrixFactorizationPlan implements PlanAssembler, PlanAssemblerDesc
 	}
 	
 	
+	/*
+	 * This object enables you to run this project locally.
+	 * Run this object with the parameters specified below will result in run this project locally.
+	 */
 	public static void main(String[] args) throws Exception {
 
 		String inputPath = "file://"+System.getProperty("user.dir") +"/datasets/100k/ua.base";
@@ -144,9 +182,6 @@ public class MatrixFactorizationPlan implements PlanAssembler, PlanAssemblerDesc
 		System.out.println("Writing output to " + outputPath);
 
 		Plan toExecute = new MatrixFactorizationPlan().getPlan(inputPath, outputPath);
-//		toExecute.setDefaultParallelism(1);
 		Util.executePlan(toExecute);
-		
-		// Util.deleteAllTempFiles();
 	}
 }
